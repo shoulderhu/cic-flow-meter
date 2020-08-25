@@ -1,0 +1,7 @@
+{
+  "a": {
+    "path": "test3.pcapng",
+    "proto": "tcp",
+    "index": [1, 2]
+  }
+}
