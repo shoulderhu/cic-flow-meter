@@ -58,14 +58,8 @@ def get_flow(rd):
         for i in [2]: # val["index"]:
             filter = "{}.stream eq {}".format(val["proto"], i)
             pkts = FileCapture(os.path.join(rd, val["path"]),
-                               display_filter=filter, keep_packets=True)
-
-            if val["proto"] == "tcp":
-                flow = NetFlow(pkts, NetFlow.PROTOCOL_TCP)
-            elif val["proto"] == "udp":
-                flow = NetFlow(pkts, NetFlow.PROTOCOL_UDP)
-            elif val["proto"] == "icmp":
-                flow = NetFlow(pkts, NetFlow.PROTOCOL_ICMP)
+                               display_filter=filter, keep_packets=False)
+            flow = NetFlow(pkts, val["proto"])
 
 
 if __name__ == "__main__":
