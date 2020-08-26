@@ -9,12 +9,6 @@ class NetFlow:
     PROTOCOL_ICMP = "icmp"
 
     def __init__(self, pkts, proto):
-        self.src_ip = None
-        self.src_port = None
-        self.dst_ip = None
-        self.dst_port = None
-        self.proto = proto
-
         self.flow = {
             "all": {
                 "id": "",
@@ -23,114 +17,115 @@ class NetFlow:
                 "port_src": "",
                 "port_dst": "",
                 "proto": proto,
+                "timestamp": "",
+                "duration": 0.0,
+                "len_per_sec": 0.0,
+                "size_per_sec": 0.0,
                 "pkt_len": 0,
                 "pkt_size": 0,
                 "pkt_min": -1,
                 "pkt_max": -1,
                 "pkt_mean": 0.0,
                 "pkt_std": 0.0,
+                "iat_len": 0,
+                "iat_size": 0,
+                "iat_min": -1,
+                "iat_max": -1,
+                "iat_mean": 0,
+                "iat_std": 0,
+                "iat_ss": 0,
+                "flg_fin": 0,
+                "flg_syn": 0,
+                "flg_rst": 0,
+                "flg_psh": 0,
+                "flg_ack": 0,
+                "flg_urg": 0,
+                "flg_ece": 0,
+                "flg_cwr": 0,
+                "dp_ratio": 0
             },
             "fwd": {
                 "id": "",
+                "len_per_sec": 0.0,
+                "size_per_sec": 0.0,
                 "pkt_len": 0,
                 "pkt_size": 0,
                 "pkt_min": -1,
                 "pkt_max": -1,
                 "pkt_mean": 0.0,
                 "pkt_std": 0.0,
-                "pkt_ss": 0
+                "pkt_ss": 0,
+                "iat_len": 0,
+                "iat_size": 0,
+                "iat_min": -1,
+                "iat_max": -1,
+                "iat_mean": 0,
+                "iat_std": 0,
+                "iat_ss": 0,
+                "iat_ts": -1,
+                "flg_psh": 0,
+                "flg_urg": 0,
+                "hdr_len": 0,
+                "win_size": 0
             },
             "bwd": {
                 "id": "",
+                "len_per_sec": 0.0,
+                "size_per_sec": 0.0,
                 "pkt_len": 0,
                 "pkt_size": 0,
                 "pkt_min": -1,
                 "pkt_max": -1,
                 "pkt_mean": 0.0,
                 "pkt_std": 0.0,
-                "pkt_ss": 0
+                "pkt_ss": 0,
+                "iat_len": 0,
+                "iat_size": 0,
+                "iat_min": -1,
+                "iat_max": -1,
+                "iat_mean": 0,
+                "iat_std": 0,
+                "iat_ss": 0,
+                "iat_ts": -1,
+                "flg_psh": 0,
+                "flg_urg": 0,
+                "hdr_len": 0,
+                "win_size": 0
             }
         }
-
-        self.iat_len = 0
-        self.iat_size = 0
-        self.iat_min = -1
-        self.iat_max = -1
-        self.iat_mean = 0
-        self.iat_std = 0
-        self.iat_ss = 0
-
-        self.fwd_iat_len = 0
-        self.fwd_iat_size = 0
-        self.fwd_iat_min = -1
-        self.fwd_iat_max = -1
-        self.fwd_iat_mean = 0
-        self.fwd_iat_std = 0
-        self.fwd_iat_ss = 0
-        self.fwd_iat_ts = -1
-
-        self.bwd_iat_len = 0
-        self.bwd_iat_size = 0
-        self.bwd_iat_min = -1
-        self.bwd_iat_max = -1
-        self.bwd_iat_mean = 0
-        self.bwd_iat_std = 0
-        self.bwd_iat_ss = 0
-        self.bwd_iat_ts = -1
-
-        self.flag_fin = 0
-        self.flag_syn = 0
-        self.flag_rst = 0
-        self.flag_psh = 0
-        self.flag_ack = 0
-        self.flag_urg = 0
-        self.flag_ece = 0
-        self.flag_cwr = 0
-
-        self.fwd_flag_psh = 0
-        self.fwd_flag_urg = 0
-
-        self.bwd_flag_psh = 0
-        self.bwd_flag_urg = 0
-
-        self.fwd_hdr_len = 0
-        self.bwd_hdr_len = 0
-
-        self.dp_ratio = 0
-
-        self.fwd_win_size = 0
-        self.bwd_win_size = 0
 
         self.set_flow(pkts)
 
     def set_flow(self, pkts):
+        iat_ts = 0
+
         try:  # First Packet
             pkt = pkts.next()
             self.set_flow_id(pkt)
+            self.set_flow_ip_port(pkt)
+            self.set_flow_timestamp(pkt)
 
-            if self.proto == NetFlow.PROTOCOL_TCP:
-                src_port = pkt.tcp.srcport
-                dst_port = pkt.tcp.dstport
-                size = int(pkt.tcp.len)
-                self.upd_fwd_psh_urg(pkt.tcp)
-                self.upd_flags(pkt.tcp)
-                self.upd_fwd_window_size(pkt.tcp)
-                self.upd_fwd_hdr_len(int(pkt.tcp.hdr_len))
-            elif self.proto == NetFlow.PROTOCOL_UDP:
-                src_port = pkt.udp.srcport
-                dst_port = pkt.udp.dstport
+            if self.flow["all"]["proto"] == NetFlow.PROTOCOL_TCP:
+                tl = pkt.tcp
+                size = int(tl.len)
+                hdr_len = int(tl.hdr_len)
+            elif self.flow["all"]["proto"] == NetFlow.PROTOCOL_UDP:
+                tl = None
                 size = 0
+                hdr_len = 0
             else:
-                src_port = 0
-                dst_port = 0
+                tl = None
                 size = 0
+                hdr_len = 0
 
-            self.set_src_ip_port(pkt.ip.src, src_port)
-            self.set_dst_ip_port(pkt.ip.dst, dst_port)
+            self.upd_flow_pkt("fwd", size)
+            self.upd_flow_iat("fwd", 0.0, 0.0)
 
-            self.set_len_size_min_max_ss("fwd", "pkt", size)
-            self.upd_fwd_iat(0.0, 0.0)
+            self.upd_flow_flg("all", tl)
+            self.upd_flow_flg("fwd", tl)
+            self.upd_flow_win_size("fwd", tl)
 
+            self.upd_flow_hdr_len("fwd", hdr_len)
         except StopIteration:
             pass
 
@@ -140,186 +135,98 @@ class NetFlow:
                 id = self.get_pkt_id(pkt)
                 path = self.get_pkt_path(id)
 
-                if self.proto == NetFlow.PROTOCOL_TCP:
-                    size = int(pkt.tcp.len)
-                    iat = float(pkt.tcp.time_delta)
-                    iat_ts = float(pkt.tcp.time_relative)
+                if self.flow["all"]["proto"] == NetFlow.PROTOCOL_TCP:
+                    tl = pkt.tcp
+                    size = int(tl.len)
+                    iat = float(tl.time_delta)
+                    iat_ts = float(tl.time_relative)
+                    hdr_len = int(tl.hdr_len)
+
                     tcp = pkt.tcp
-                    self.upd_flags(pkt.tcp)
-                elif self.proto == NetFlow.PROTOCOL_UDP:
+                elif self.flow["all"]["proto"] == NetFlow.PROTOCOL_UDP:
+                    tl = None
                     size = int(pkt.udp.len)
                     iat = 0
                     iat_ts = 0
-                    tcp = None
+                    hdr_len = 0
+
                 else:
+                    tl = None
                     size = 0
                     iat = 0
                     iat_ts = 0
-                    tcp = None
+                    hdr_len = 0
 
-                self.set_len_size_min_max_ss(path, "pkt", size)
-                self.upd_iat(iat)
+                self.upd_flow_pkt(path, size)
 
-                if self.flow["fwd"]["id"] == id:
+                self.upd_flow_iat("all", iat)
+                self.upd_flow_iat(path, iat_ts - self.flow[path]["iat_ts"], iat_ts)
 
-                    self.upd_fwd_iat(iat_ts - self.fwd_iat_ts, iat_ts)
-                    self.upd_fwd_psh_urg(tcp)
-                    self.upd_fwd_window_size(tcp)
-                    self.upd_fwd_hdr_len(int(pkt.tcp.hdr_len))
-                else:
-                    self.upd_bwd_iat(iat_ts - self.bwd_iat_ts, iat_ts)
-                    self.upd_bwd_psh_urg(tcp)
-                    self.upd_bwd_window_size(tcp)
-                    self.upd_bwd_hdr_len(int(pkt.tcp.hdr_len))
+                self.upd_flow_flg("all", tl)
+                self.upd_flow_flg(path, tl)
+                self.upd_flow_win_size(path, tl)
+
+                self.upd_flow_hdr_len(path, hdr_len)
             except StopIteration:
                 break
 
-        self.set_mean_std("fwd", "pkt")
-        self.set_mean_std("bwd", "pkt")
-        self.set_all_len_size_min_max_mean_std()
+        self.set_flow_pkt()
+        self.set_flow_iat()
 
-        self.set_iat_mean_std()
-        self.set_down_up_ratio()
+        self.set_flow_duration(iat_ts)
+        self.set_flow_speed(iat_ts)
+
+        self.set_flow_dp_ratio()
 
         pprint(self.flow)
 
-
-
-    def upd_iat(self, iat):
-        self.iat_len += 1
-        iat *= 10**6
-        self.iat_size += iat
-        self.iat_ss += iat * iat
-
-        if self.iat_min == -1:
-            self.iat_min = iat
-        else:
-            self.iat_min = min(self.iat_min, iat)
-        if self.iat_max == -1:
-            self.iat_max = iat
-        else:
-            self.iat_max = max(self.iat_max, iat)
-
-    def upd_fwd_iat(self, iat, ts):
-        if self.fwd_iat_ts == -1:
-            self.fwd_iat_ts = ts
-            return
-
-        self.fwd_iat_ts = ts
-        self.fwd_iat_len += 1
-        iat *= 10**6
-        self.fwd_iat_size += iat
-        self.fwd_iat_ss += iat * iat
-
-        if self.fwd_iat_min == -1:
-            self.fwd_iat_min = iat
-        else:
-            self.fwd_iat_min = min(self.fwd_iat_min, iat)
-        if self.fwd_iat_max == -1:
-            self.fwd_iat_max = iat
-        else:
-            self.fwd_iat_max = max(self.fwd_iat_max, iat)
-
-    def upd_bwd_iat(self, iat, ts):
-        if self.bwd_iat_ts == -1:
-            self.bwd_iat_ts = ts
-            return
-
-        self.bwd_iat_ts = ts
-        self.bwd_iat_len += 1
-        iat *= 10**6
-        self.bwd_iat_size += iat
-        self.bwd_iat_ss += iat * iat
-
-        if self.bwd_iat_min == -1:
-            self.bwd_iat_min = iat
-        else:
-            self.bwd_iat_min = min(self.bwd_iat_min, iat)
-        if self.bwd_iat_max == -1:
-            self.bwd_iat_max = iat
-        else:
-            self.bwd_iat_max = max(self.bwd_iat_max, iat)
-
-    def upd_fwd_psh_urg(self, tcp):
-        if tcp is not None:
-            self.fwd_flag_psh += int(tcp.flags_push)
-            self.fwd_flag_urg += int(tcp.flags_urg)
-
-    def upd_bwd_psh_urg(self, tcp):
-        if tcp is not None:
-            self.bwd_flag_psh += int(tcp.flags_push)
-            self.bwd_flag_urg += int(tcp.flags_urg)
-
-    def upd_flags(self, tcp):
-        self.flag_fin += int(tcp.flags_fin)
-        self.flag_syn += int(tcp.flags_syn)
-        self.flag_rst += int(tcp.flags_reset)
-        self.flag_psh += int(tcp.flags_push)
-        self.flag_ack += int(tcp.flags_ack)
-        self.flag_urg += int(tcp.flags_urg)
-        self.flag_ece += int(tcp.flags_ecn)
-        self.flag_cwr += int(tcp.flags_cwr)
-
-    def upd_fwd_hdr_len(self, length):
-        self.fwd_hdr_len += length
-
-    def upd_bwd_hdr_len(self, length):
-        self.bwd_hdr_len += length
-
-    def upd_fwd_window_size(self, tcp):
-        if tcp is not None:
-            self.fwd_win_size += int(tcp.window_size)
-
-    def upd_bwd_window_size(self, tcp):
-        if tcp is not None:
-            self.bwd_win_size += int(tcp.window_size)
-
-    def set_src_ip_port(self, ip, port):
-        self.src_ip = ip
-        self.src_port = port
-
-    def set_dst_ip_port(self, ip, port):
-        self.dst_ip = ip
-        self.dst_port = port
-
-    def set_iat_mean_std(self):
-        self.iat_mean = float(self.iat_size) / self.iat_len
-        self.iat_std = self.get_std(self.iat_len, self.iat_ss, self.iat_mean)
-
-        self.fwd_iat_mean = float(self.fwd_iat_size) / self.fwd_iat_len
-        self.fwd_iat_std = self.get_std(self.fwd_iat_len, self.fwd_iat_ss, self.fwd_iat_mean)
-
-        self.bwd_iat_mean = float(self.bwd_iat_size) / self.bwd_iat_len
-        self.bwd_iat_std = self.get_std(self.bwd_iat_len, self.bwd_iat_ss, self.bwd_iat_mean)
-
-    def set_down_up_ratio(self):
-        if self.flow["fwd"]["pkt_len"] > 0:
-            self.dp_ratio = float(self.flow["bwd"]["pkt_len"]) / self.flow["fwd"]["pkt_len"]
-
-
-
     def get_pkt_id(self, pkt):
-        return "{} {}:{} > {}:{}".format(self.proto.upper(), pkt.ip.src, pkt[self.proto].srcport,
-                                         pkt.ip.dst, pkt[self.proto].dstport)
+        proto = self.flow["all"]["proto"]
+        return "{} {}:{} > {}:{}".format(proto.upper(),
+                                         pkt.ip.src, pkt[proto].srcport,
+                                         pkt.ip.dst, pkt[proto].dstport)
 
     def get_pkt_path(self, id):
         if self.flow["fwd"]["id"] == id:
             return "fwd"
-        else:
+        elif self.flow["bwd"]["id"] == id:
             return "bwd"
+        else:
+            return ""
 
     def get_std(self, n, ss, mean):
         return sqrt((ss / float(n - 1)) - (n / float(n - 1)) * (mean * mean))
 
     def set_flow_id(self, pkt):
-        self.flow["fwd"]["id"] = "{} {}:{} > {}:{}".format(self.proto.upper(), pkt.ip.src, pkt[self.proto].srcport,
-                                                           pkt.ip.dst, pkt[self.proto].dstport)
-        self.flow["bwd"]["id"] = "{} {}:{} > {}:{}".format(self.proto.upper(), pkt.ip.dst, pkt[self.proto].dstport,
-                                                           pkt.ip.src, pkt[self.proto].srcport)
-        self.flow["all"]["id"] = "{} {}:{} <> {}:{}".format(self.proto.upper(), pkt.ip.src, pkt[self.proto].srcport,
-                                                            pkt.ip.dst, pkt[self.proto].dstport)
+        proto = self.flow["all"]["proto"]
+        self.flow["fwd"]["id"] = "{} {}:{} > {}:{}".format(proto.upper(),
+                                                           pkt.ip.src, pkt[proto].srcport,
+                                                           pkt.ip.dst, pkt[proto].dstport)
+        self.flow["bwd"]["id"] = "{} {}:{} > {}:{}".format(proto.upper(),
+                                                           pkt.ip.dst, pkt[proto].dstport,
+                                                           pkt.ip.src, pkt[proto].srcport)
+        self.flow["all"]["id"] = "{} {}:{} <> {}:{}".format(proto.upper(),
+                                                            pkt.ip.src, pkt[proto].srcport,
+                                                            pkt.ip.dst, pkt[proto].dstport)
 
-    def set_len_size_min_max_ss(self, path, cat, size):
+    def set_flow_ip_port(self, pkt):
+        proto = self.flow["all"]["proto"]
+        self.flow["all"]["ip_src"] = pkt.ip.src
+        self.flow["all"]["ip_dst"] = pkt.ip.dst
+        self.flow["all"]["port_src"] = pkt[proto].srcport
+        self.flow["all"]["port_dst"] = pkt[proto].dstport
+
+    def set_flow_timestamp(self, pkt):
+        self.flow["all"]["timestamp"] = str(pkt.sniff_time)
+
+    def set_flow_duration(self, ts):
+        self.flow["all"]["duration"] = ts * 10**6
+
+    def set_flow_len_size_per_sec(self, path, duration):
+        self.flow[path]["len_per_sec"] = float(self.flow[path]["pkt_len"]) / duration
+        self.flow[path]["size_per_sec"] = float(self.flow[path]["pkt_size"]) / duration
+
+    def set_flow_len_size_min_max_ss(self, path, cat, size):
         self.flow[path][cat + "_len"] += 1
         self.flow[path][cat + "_size"] += size
         self.flow[path][cat + "_ss"] += size * size
@@ -334,13 +241,13 @@ class NetFlow:
         else:
             self.flow[path][cat + "_max"] = max(self.flow[path][cat + "_max"], size)
 
-    def set_mean_std(self, path, cat):
+    def set_flow_mean_std(self, path, cat):
         self.flow[path][cat + "_mean"] = float(self.flow[path][cat + "_size"]) / self.flow[path][cat + "_len"]
         self.flow[path][cat + "_std"] = self.get_std(self.flow[path][cat + "_len"],
                                                      self.flow[path][cat + "_ss"],
                                                      self.flow[path][cat + "_mean"])
 
-    def set_all_len_size_min_max_mean_std(self):
+    def set_flow_len_size_min_max_mean_std(self, cat=None):
         self.flow["all"]["pkt_len"] = self.flow["fwd"]["pkt_len"] + self.flow["bwd"]["pkt_len"]
         self.flow["all"]["pkt_size"] = self.flow["fwd"]["pkt_size"] + self.flow["bwd"]["pkt_size"]
         self.flow["all"]["pkt_min"] = min(self.flow["fwd"]["pkt_min"], self.flow["bwd"]["pkt_min"])
@@ -349,3 +256,57 @@ class NetFlow:
         self.flow["all"]["pkt_std"] = self.get_std(self.flow["all"]["pkt_len"],
                                                    self.flow["fwd"]["pkt_ss"] + self.flow["bwd"]["pkt_ss"],
                                                    self.flow["all"]["pkt_mean"])
+
+    def upd_flow_pkt(self, path, size):
+        self.set_flow_len_size_min_max_ss(path, "pkt", size)
+
+    def set_flow_pkt(self):
+        self.set_flow_mean_std("fwd", "pkt")
+        self.set_flow_mean_std("bwd", "pkt")
+        self.set_flow_len_size_min_max_mean_std()
+
+    def upd_flow_iat(self, path, iat, ts=None):
+        if ts is None:
+            self.set_flow_len_size_min_max_ss(path, "iat", iat * 10**6)
+        else:
+            if self.flow[path]["iat_ts"] != -1:
+                self.flow[path]["iat_ts"] = ts
+                self.set_flow_len_size_min_max_ss(path, "iat", iat * 10**6)
+            else:
+                self.flow[path]["iat_ts"] = ts
+
+    def set_flow_iat(self):
+        self.set_flow_mean_std("all", "iat")
+        self.set_flow_mean_std("fwd", "iat")
+        self.set_flow_mean_std("bwd", "iat")
+
+    def upd_flow_flg(self, path, tcp):
+        if tcp is not None:
+            if path == "all":
+                self.flow[path]["flg_fin"] += int(tcp.flags_fin)
+                self.flow[path]["flg_syn"] += int(tcp.flags_syn)
+                self.flow[path]["flg_rst"] += int(tcp.flags_reset)
+                self.flow[path]["flg_psh"] += int(tcp.flags_push)
+                self.flow[path]["flg_ack"] += int(tcp.flags_ack)
+                self.flow[path]["flg_urg"] += int(tcp.flags_urg)
+                self.flow[path]["flg_ece"] += int(tcp.flags_ecn)
+                self.flow[path]["flg_cwr"] += int(tcp.flags_cwr)
+            else:
+                self.flow[path]["flg_psh"] += int(tcp.flags_push)
+                self.flow[path]["flg_urg"] += int(tcp.flags_urg)
+
+    def upd_flow_hdr_len(self, path, length):
+        self.flow[path]["hdr_len"] += length
+
+    def set_flow_speed(self, duration):
+        self.set_flow_len_size_per_sec("all", duration)
+        self.set_flow_len_size_per_sec("fwd", duration)
+        self.set_flow_len_size_per_sec("bwd", duration)
+
+    def set_flow_dp_ratio(self):
+        if self.flow["fwd"]["pkt_len"] > 0:
+            self.flow["all"]["dp_ratio"] = float(self.flow["bwd"]["pkt_len"]) / self.flow["fwd"]["pkt_len"]
+
+    def upd_flow_win_size(self, path, tcp):
+        if tcp is not None:
+            self.flow[path]["win_size"] += int(tcp.window_size)
