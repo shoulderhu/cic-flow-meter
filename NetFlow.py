@@ -55,6 +55,7 @@ class NetFlow:
                 "pkt_mean": 0.0,
                 "pkt_std": 0.0,
                 "pkt_ss": 0,
+                "pkt_len_pay": 0,
                 "iat_len": 0,
                 "iat_size": 0,
                 "iat_min": -1,
@@ -65,7 +66,8 @@ class NetFlow:
                 "iat_ts": -1,
                 "flg_psh": 0,
                 "flg_urg": 0,
-                "hdr_len": 0,
+                "hdr_size": 0,
+                "hdr_min": -1,
                 "win_size": 0
             },
             "bwd": {
@@ -79,6 +81,7 @@ class NetFlow:
                 "pkt_mean": 0.0,
                 "pkt_std": 0.0,
                 "pkt_ss": 0,
+                "pkt_len_pay": 0,
                 "iat_len": 0,
                 "iat_size": 0,
                 "iat_min": -1,
@@ -89,7 +92,8 @@ class NetFlow:
                 "iat_ts": -1,
                 "flg_psh": 0,
                 "flg_urg": 0,
-                "hdr_len": 0,
+                "hdr_size": 0,
+                "hdr_min": -1,
                 "win_size": 0
             }
         }
@@ -108,15 +112,15 @@ class NetFlow:
             if self.flow["all"]["proto"] == NetFlow.PROTOCOL_TCP:
                 tl = pkt.tcp
                 size = int(tl.len)
-                hdr_len = int(tl.hdr_len)
+                hdr_size = int(tl.hdr_len)
             elif self.flow["all"]["proto"] == NetFlow.PROTOCOL_UDP:
                 tl = None
                 size = 0
-                hdr_len = 0
+                hdr_size = 0
             else:
                 tl = None
                 size = 0
-                hdr_len = 0
+                hdr_size = 0
 
             self.upd_flow_pkt("fwd", size)
             self.upd_flow_iat("fwd", 0.0, 0.0)
@@ -125,7 +129,7 @@ class NetFlow:
             self.upd_flow_flg("fwd", tl)
             self.upd_flow_win_size("fwd", tl)
 
-            self.upd_flow_hdr_len("fwd", hdr_len)
+            self.upd_flow_hdr("fwd", hdr_size)
         except StopIteration:
             pass
 
@@ -140,22 +144,19 @@ class NetFlow:
                     size = int(tl.len)
                     iat = float(tl.time_delta)
                     iat_ts = float(tl.time_relative)
-                    hdr_len = int(tl.hdr_len)
-
-                    tcp = pkt.tcp
+                    hdr_size = int(tl.hdr_len)
                 elif self.flow["all"]["proto"] == NetFlow.PROTOCOL_UDP:
                     tl = None
                     size = int(pkt.udp.len)
                     iat = 0
                     iat_ts = 0
-                    hdr_len = 0
-
+                    hdr_size = 0
                 else:
                     tl = None
                     size = 0
                     iat = 0
                     iat_ts = 0
-                    hdr_len = 0
+                    hdr_size = 0
 
                 self.upd_flow_pkt(path, size)
 
@@ -166,7 +167,7 @@ class NetFlow:
                 self.upd_flow_flg(path, tl)
                 self.upd_flow_win_size(path, tl)
 
-                self.upd_flow_hdr_len(path, hdr_len)
+                self.upd_flow_hdr(path, hdr_size)
             except StopIteration:
                 break
 
@@ -259,6 +260,8 @@ class NetFlow:
 
     def upd_flow_pkt(self, path, size):
         self.set_flow_len_size_min_max_ss(path, "pkt", size)
+        if size > 0:
+            self.flow[path]["pkt_len_pay"] += 1
 
     def set_flow_pkt(self):
         self.set_flow_mean_std("fwd", "pkt")
@@ -295,8 +298,12 @@ class NetFlow:
                 self.flow[path]["flg_psh"] += int(tcp.flags_push)
                 self.flow[path]["flg_urg"] += int(tcp.flags_urg)
 
-    def upd_flow_hdr_len(self, path, length):
-        self.flow[path]["hdr_len"] += length
+    def upd_flow_hdr(self, path, length):
+        self.flow[path]["hdr_size"] += length
+        if self.flow[path]["hdr_min"] == -1:
+            self.flow[path]["hdr_min"] = length
+        else:
+            self.flow[path]["hdr_min"] = min(self.flow[path]["hdr_min"], length)
 
     def set_flow_speed(self, duration):
         self.set_flow_len_size_per_sec("all", duration)
