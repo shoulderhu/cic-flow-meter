@@ -1,6 +1,9 @@
 import logging
+import pandas as pd
 from math import sqrt
 from pprint import pprint
+
+from feature import Feature
 
 
 class NetFlow:
@@ -179,7 +182,10 @@ class NetFlow:
 
         self.set_flow_dp_ratio()
 
-        pprint(self.flow)
+
+
+
+        #pprint(self.flow)
 
     def get_pkt_id(self, pkt):
         proto = self.flow["all"]["proto"]
@@ -196,7 +202,10 @@ class NetFlow:
             return ""
 
     def get_std(self, n, ss, mean):
-        return sqrt((ss / float(n - 1)) - (n / float(n - 1)) * (mean * mean))
+        if n == 1:
+            return 0
+        else:
+            return sqrt((ss / float(n - 1)) - (n / float(n - 1)) * (mean * mean))
 
     def set_flow_id(self, pkt):
         proto = self.flow["all"]["proto"]
@@ -243,10 +252,11 @@ class NetFlow:
             self.flow[path][cat + "_max"] = max(self.flow[path][cat + "_max"], size)
 
     def set_flow_mean_std(self, path, cat):
-        self.flow[path][cat + "_mean"] = float(self.flow[path][cat + "_size"]) / self.flow[path][cat + "_len"]
-        self.flow[path][cat + "_std"] = self.get_std(self.flow[path][cat + "_len"],
-                                                     self.flow[path][cat + "_ss"],
-                                                     self.flow[path][cat + "_mean"])
+        if self.flow[path][cat + "_len"] != 0:
+            self.flow[path][cat + "_mean"] = float(self.flow[path][cat + "_size"]) / self.flow[path][cat + "_len"]
+            self.flow[path][cat + "_std"] = self.get_std(self.flow[path][cat + "_len"],
+                                                         self.flow[path][cat + "_ss"],
+                                                         self.flow[path][cat + "_mean"])
 
     def set_flow_len_size_min_max_mean_std(self, cat=None):
         self.flow["all"]["pkt_len"] = self.flow["fwd"]["pkt_len"] + self.flow["bwd"]["pkt_len"]
@@ -317,3 +327,69 @@ class NetFlow:
     def upd_flow_win_size(self, path, tcp):
         if tcp is not None:
             self.flow[path]["win_size"] += int(tcp.window_size)
+
+    def to_df(self, source, label=None):
+        if label is None:
+            label = "NeedManualLabel"
+
+        return pd.DataFrame([[self.flow["all"]["id"],
+                             self.flow["all"]["timestamp"],
+                             self.flow["all"]["duration"],
+                             self.flow["all"]["pkt_len"],
+                             self.flow["all"]["pkt_size"],
+                             self.flow["all"]["pkt_min"],
+                             self.flow["all"]["pkt_max"],
+                             self.flow["all"]["pkt_mean"],
+                             self.flow["all"]["pkt_std"],
+                             self.flow["fwd"]["pkt_len"],
+                             self.flow["fwd"]["pkt_size"],
+                             self.flow["fwd"]["pkt_min"],
+                             self.flow["fwd"]["pkt_max"],
+                             self.flow["fwd"]["pkt_mean"],
+                             self.flow["fwd"]["pkt_std"],
+                             self.flow["bwd"]["pkt_len"],
+                             self.flow["bwd"]["pkt_size"],
+                             self.flow["bwd"]["pkt_min"],
+                             self.flow["bwd"]["pkt_max"],
+                             self.flow["bwd"]["pkt_mean"],
+                             self.flow["bwd"]["pkt_std"],
+                             self.flow["all"]["len_per_sec"],
+                             self.flow["all"]["size_per_sec"],
+                             self.flow["fwd"]["len_per_sec"],
+                             self.flow["fwd"]["size_per_sec"],
+                             self.flow["bwd"]["len_per_sec"],
+                             self.flow["bwd"]["size_per_sec"],
+                             self.flow["all"]["iat_size"],
+                             self.flow["all"]["iat_min"],
+                             self.flow["all"]["iat_max"],
+                             self.flow["all"]["iat_mean"],
+                             self.flow["all"]["iat_std"],
+                             self.flow["fwd"]["iat_size"],
+                             self.flow["fwd"]["iat_min"],
+                             self.flow["fwd"]["iat_max"],
+                             self.flow["fwd"]["iat_mean"],
+                             self.flow["fwd"]["iat_std"],
+                             self.flow["bwd"]["iat_size"],
+                             self.flow["bwd"]["iat_min"],
+                             self.flow["bwd"]["iat_max"],
+                             self.flow["bwd"]["iat_mean"],
+                             self.flow["bwd"]["iat_std"],
+                             self.flow["fwd"]["flg_psh"],
+                             self.flow["fwd"]["flg_urg"],
+                             self.flow["bwd"]["flg_psh"],
+                             self.flow["bwd"]["flg_urg"],
+                             self.flow["all"]["flg_fin"],
+                             self.flow["all"]["flg_syn"],
+                             self.flow["all"]["flg_rst"],
+                             self.flow["all"]["flg_psh"],
+                             self.flow["all"]["flg_ack"],
+                             self.flow["all"]["flg_urg"],
+                             self.flow["all"]["flg_ece"],
+                             self.flow["all"]["flg_cwr"],
+                             self.flow["fwd"]["hdr_size"],
+                             self.flow["bwd"]["hdr_size"],
+                             self.flow["all"]["dp_ratio"],
+                             self.flow["fwd"]["win_size"],
+                             self.flow["bwd"]["win_size"],
+                             self.flow["fwd"]["pkt_len_pay"],
+                             source, label]], columns=Feature.col)

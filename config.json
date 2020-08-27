@@ -1,7 +1,33 @@
 {
-  "a": {
-    "path": "test3.pcapng",
+  "test4.pcapng": {
     "proto": "tcp",
-    "index": [1, 2]
+    "label": "sqlmap",
+    "enable": true,
+    "comment": ""
+  },
+  "test2.pcapng": {
+    "proto": "tcp",
+    "tcp_index": "1,2",
+    "label": "sqlmap",
+    "enable": false,
+    "comment": ""
+  },
+  "test3.pcapng": {
+    "proto": "udp",
+    "udp_index": "1-2",
+    "enable": false,
+    "comment": ""
+  },
+  "test5.pcapng": {
+    "proto": "all",
+    "tcp_index": "1-3",
+    "udp_index": "2-3,5",
+    "enable": false,
+    "comment": ""
+  },
+  "test6.pcapng": {
+    "proto": "all",
+    "enable": false,
+    "comment": ""
   }
 }
