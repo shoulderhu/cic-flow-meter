@@ -1,33 +1,71 @@
 {
-  "test4.pcapng": {
-    "proto": "tcp",
-    "label": "sqlmap",
-    "enable": true,
-    "comment": ""
-  },
-  "test2.pcapng": {
-    "proto": "tcp",
-    "tcp_index": "1,2",
-    "label": "sqlmap",
-    "enable": false,
-    "comment": ""
-  },
-  "test3.pcapng": {
-    "proto": "udp",
-    "udp_index": "1-2",
-    "enable": false,
-    "comment": ""
-  },
-  "test5.pcapng": {
-    "proto": "all",
-    "tcp_index": "1-3",
-    "udp_index": "2-3,5",
-    "enable": false,
-    "comment": ""
-  },
-  "test6.pcapng": {
-    "proto": "all",
-    "enable": false,
-    "comment": ""
+  "read-dir": "pcap",
+  "write-dir": "csv",
+  "pcap": {
+    "demo.pcap": {
+      "proto": "tcp or udp or both",
+      "label": "normal",
+      "index": {
+        "tcp": "1-10,15",
+        "udp": "2-3,11"
+      },
+      "output": "demo.csv",
+      "enable": false,
+      "comment": [""]
+    },
+    "test4-1.pcapng": {
+      "proto": "tcp",
+      "label": "normal",
+      "output": "test_00001.csv",
+      "enable": true
+    },
+    "test4-2.pcapng": {
+      "proto": "tcp",
+      "label": "normal",
+      "output": "test_00002.csv",
+      "enable": true
+    },
+    "test4-3.pcapng": {
+      "proto": "tcp",
+      "label": "normal",
+      "output": "test_00003.csv",
+      "enable": false
+    },
+    "test4-4.pcapng": {
+      "proto": "tcp",
+      "label": "normal",
+      "output": "test_00004.csv",
+      "enable": false
+    },
+    "test4-5.pcapng": {
+      "proto": "tcp",
+      "label": "normal",
+      "output": "test_00005.csv",
+      "enable": false
+    },
+    "test4-6.pcapng": {
+      "proto": "tcp",
+      "label": "normal",
+      "output": "test_00006.csv",
+      "enable": false
+    },
+    "test4-7.pcapng": {
+      "proto": "tcp",
+      "label": "normal",
+      "output": "test_00007.csv",
+      "enable": false
+    },
+    "test4-8.pcapng": {
+      "proto": "tcp",
+      "label": "normal",
+      "output": "test_00008.csv",
+      "enable": false
+    },
+    "out_00001_20170703201803.pcap": {
+      "proto": "tcp",
+      "label": "normal",
+      "output": "out_00001.csv",
+      "enable": false
+    }
   }
 }

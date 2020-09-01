@@ -11,7 +11,7 @@ class NetFlow:
     PROTOCOL_UDP = "udp"
     PROTOCOL_ICMP = "icmp"
 
-    def __init__(self, pkts, proto):
+    def __init__(self, proto):
         self.flow = {
             "all": {
                 "id": "",
@@ -26,14 +26,14 @@ class NetFlow:
                 "size_per_sec": 0.0,
                 "pkt_len": 0,
                 "pkt_size": 0,
-                "pkt_min": -1,
-                "pkt_max": -1,
+                # "pkt_min": -1,
+                # "pkt_max": -1,
                 "pkt_mean": 0.0,
                 "pkt_std": 0.0,
                 "iat_len": 0,
                 "iat_size": 0,
-                "iat_min": -1,
-                "iat_max": -1,
+                # "iat_min": -1,
+                # "iat_max": -1,
                 "iat_mean": 0,
                 "iat_std": 0,
                 "iat_ss": 0,
@@ -53,24 +53,24 @@ class NetFlow:
                 "size_per_sec": 0.0,
                 "pkt_len": 0,
                 "pkt_size": 0,
-                "pkt_min": -1,
-                "pkt_max": -1,
+                # "pkt_min": -1,
+                # "pkt_max": -1,
                 "pkt_mean": 0.0,
                 "pkt_std": 0.0,
                 "pkt_ss": 0,
                 "pkt_len_pay": 0,
                 "iat_len": 0,
                 "iat_size": 0,
-                "iat_min": -1,
-                "iat_max": -1,
+                # "iat_min": -1,
+                # "iat_max": -1,
                 "iat_mean": 0,
                 "iat_std": 0,
                 "iat_ss": 0,
-                "iat_ts": -1,
+                # "iat_ts": -1,
                 "flg_psh": 0,
                 "flg_urg": 0,
                 "hdr_size": 0,
-                "hdr_min": -1,
+                # "hdr_min": -1,
                 "win_size": 0
             },
             "bwd": {
@@ -79,29 +79,31 @@ class NetFlow:
                 "size_per_sec": 0.0,
                 "pkt_len": 0,
                 "pkt_size": 0,
-                "pkt_min": -1,
-                "pkt_max": -1,
+                # "pkt_min": -1,
+                # "pkt_max": -1,
                 "pkt_mean": 0.0,
                 "pkt_std": 0.0,
                 "pkt_ss": 0,
                 "pkt_len_pay": 0,
                 "iat_len": 0,
                 "iat_size": 0,
-                "iat_min": -1,
-                "iat_max": -1,
+                # "iat_min": -1,
+                # "iat_max": -1,
                 "iat_mean": 0,
                 "iat_std": 0,
                 "iat_ss": 0,
-                "iat_ts": -1,
+                # "iat_ts": -1,
                 "flg_psh": 0,
                 "flg_urg": 0,
                 "hdr_size": 0,
-                "hdr_min": -1,
+                # "hdr_min": -1,
                 "win_size": 0
             }
         }
 
-        self.set_flow(pkts)
+        self.first = True
+        self.ts = 0
+        # self.set_flow(pkts)
 
     def set_flow(self, pkts):
         iat_ts = 0
@@ -187,6 +189,68 @@ class NetFlow:
 
         #pprint(self.flow)
 
+    def upd_flow(self, pkt):
+        if self.first:  # First Packet
+            self.first = False
+            self.set_flow_id(pkt)
+            self.set_flow_ip_port(pkt)
+            self.set_flow_timestamp(pkt)
+
+            if self.flow["all"]["proto"] == NetFlow.PROTOCOL_TCP:
+                tl = pkt.tcp
+                size = int(tl.len)
+                hdr_size = int(tl.hdr_len)
+            elif self.flow["all"]["proto"] == NetFlow.PROTOCOL_UDP:
+                tl = None
+                size = 0
+                hdr_size = 0
+            else:
+                tl = None
+                size = 0
+                hdr_size = 0
+
+            self.upd_flow_pkt("fwd", size)
+            self.upd_flow_iat("fwd", 0.0, 0.0)
+
+            self.upd_flow_flg("all", tl)
+            self.upd_flow_flg("fwd", tl)
+            self.upd_flow_win_size("fwd", tl)
+
+            self.upd_flow_hdr("fwd", hdr_size)
+        else:  # Other Packets
+            id = self.get_pkt_id(pkt)
+            path = self.get_pkt_path(id)
+
+            if self.flow["all"]["proto"] == NetFlow.PROTOCOL_TCP:
+                tl = pkt.tcp
+                size = int(tl.len)
+                iat = float(tl.time_delta)
+                self.ts = float(tl.time_relative)
+                hdr_size = int(tl.hdr_len)
+            elif self.flow["all"]["proto"] == NetFlow.PROTOCOL_UDP:
+                tl = None
+                size = int(pkt.udp.len)
+                iat = 0
+                self.ts = 0
+                hdr_size = 0
+            else:
+                tl = None
+                size = 0
+                iat = 0
+                self.ts = 0
+                hdr_size = 0
+
+            self.upd_flow_pkt(path, size)
+
+            self.upd_flow_iat("all", iat)
+            self.upd_flow_iat(path, self.ts - self.flow[path].get("iat_ts", 0), self.ts)
+
+            self.upd_flow_flg("all", tl)
+            self.upd_flow_flg(path, tl)
+            self.upd_flow_win_size(path, tl)
+
+            self.upd_flow_hdr(path, hdr_size)
+
     def get_pkt_id(self, pkt):
         proto = self.flow["all"]["proto"]
         return "{} {}:{} > {}:{}".format(proto.upper(),
@@ -241,12 +305,12 @@ class NetFlow:
         self.flow[path][cat + "_size"] += size
         self.flow[path][cat + "_ss"] += size * size
 
-        if self.flow[path][cat + "_min"] == -1:
+        if cat + "_min" not in self.flow[path].keys():
             self.flow[path][cat + "_min"] = size
         else:
             self.flow[path][cat + "_min"] = min(self.flow[path][cat + "_min"], size)
 
-        if self.flow[path][cat + "_max"] == -1:
+        if cat + "_max" not in self.flow[path].keys():
             self.flow[path][cat + "_max"] = size
         else:
             self.flow[path][cat + "_max"] = max(self.flow[path][cat + "_max"], size)
@@ -282,7 +346,7 @@ class NetFlow:
         if ts is None:
             self.set_flow_len_size_min_max_ss(path, "iat", iat * 10**6)
         else:
-            if self.flow[path]["iat_ts"] != -1:
+            if "iat_ts" in self.flow[path]:
                 self.flow[path]["iat_ts"] = ts
                 self.set_flow_len_size_min_max_ss(path, "iat", iat * 10**6)
             else:
@@ -310,7 +374,7 @@ class NetFlow:
 
     def upd_flow_hdr(self, path, length):
         self.flow[path]["hdr_size"] += length
-        if self.flow[path]["hdr_min"] == -1:
+        if "hdr_min" not in self.flow[path].keys():
             self.flow[path]["hdr_min"] = length
         else:
             self.flow[path]["hdr_min"] = min(self.flow[path]["hdr_min"], length)
@@ -332,25 +396,33 @@ class NetFlow:
         if label is None:
             label = "NeedManualLabel"
 
+        self.set_flow_pkt()
+        self.set_flow_iat()
+
+        self.set_flow_duration(self.ts)
+        self.set_flow_speed(self.ts)
+
+        self.set_flow_dp_ratio()
+
         return pd.DataFrame([[self.flow["all"]["id"],
                              self.flow["all"]["timestamp"],
                              self.flow["all"]["duration"],
                              self.flow["all"]["pkt_len"],
                              self.flow["all"]["pkt_size"],
-                             self.flow["all"]["pkt_min"],
-                             self.flow["all"]["pkt_max"],
+                             self.flow["all"].get("pkt_min", 0),
+                             self.flow["all"].get("pkt_max", 0),
                              self.flow["all"]["pkt_mean"],
                              self.flow["all"]["pkt_std"],
                              self.flow["fwd"]["pkt_len"],
                              self.flow["fwd"]["pkt_size"],
-                             self.flow["fwd"]["pkt_min"],
-                             self.flow["fwd"]["pkt_max"],
+                             self.flow["fwd"].get("pkt_min", 0),
+                             self.flow["fwd"].get("pkt_max", 0),
                              self.flow["fwd"]["pkt_mean"],
                              self.flow["fwd"]["pkt_std"],
                              self.flow["bwd"]["pkt_len"],
                              self.flow["bwd"]["pkt_size"],
-                             self.flow["bwd"]["pkt_min"],
-                             self.flow["bwd"]["pkt_max"],
+                             self.flow["bwd"].get("pkt_min", 0),
+                             self.flow["bwd"].get("pkt_max", 0),
                              self.flow["bwd"]["pkt_mean"],
                              self.flow["bwd"]["pkt_std"],
                              self.flow["all"]["len_per_sec"],
@@ -360,18 +432,18 @@ class NetFlow:
                              self.flow["bwd"]["len_per_sec"],
                              self.flow["bwd"]["size_per_sec"],
                              self.flow["all"]["iat_size"],
-                             self.flow["all"]["iat_min"],
-                             self.flow["all"]["iat_max"],
+                             self.flow["all"].get("iat_min", 0),
+                             self.flow["all"].get("iat_max", 0),
                              self.flow["all"]["iat_mean"],
                              self.flow["all"]["iat_std"],
                              self.flow["fwd"]["iat_size"],
-                             self.flow["fwd"]["iat_min"],
-                             self.flow["fwd"]["iat_max"],
+                             self.flow["fwd"].get("iat_min", 0),
+                             self.flow["fwd"].get("iat_max", 0),
                              self.flow["fwd"]["iat_mean"],
                              self.flow["fwd"]["iat_std"],
                              self.flow["bwd"]["iat_size"],
-                             self.flow["bwd"]["iat_min"],
-                             self.flow["bwd"]["iat_max"],
+                             self.flow["bwd"].get("iat_min", 0),
+                             self.flow["bwd"].get("iat_max", 0),
                              self.flow["bwd"]["iat_mean"],
                              self.flow["bwd"]["iat_std"],
                              self.flow["fwd"]["flg_psh"],

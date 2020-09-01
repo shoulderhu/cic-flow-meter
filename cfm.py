@@ -3,87 +3,95 @@ import json
 import logging
 import nest_asyncio
 import os
+import pandas as pd
 
-from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, wait, FIRST_COMPLETED
 from pyfiglet import Figlet
 from pyshark import FileCapture
 
 from netflow import NetFlow
-from feature import feature
+from feature import Feature # feature
 
 
 @click.command()
-@click.option("-r", "--read-dir", "rd",
-              help="Read packet data from DIR.",
-              default="pcap", show_default=True)
-@click.option("-w", "--write-dir", "wd",
-              help="Write csv to DIR.",
-              default="csv", show_default=True)
 @click.option("-c", "--config", "conf",
               help="",
               default="config.json", show_default=True)
 @click.option("-j", "--jobs", "jobs",
               help="Number of jobs to run simultaneously",
               default=4, show_default=True)
-@click.option("--flow-timeout", "flow_timeout",
-              help="Flow Timeout.",
-              default=120000000, show_default=True)
-@click.option("--activity-timeout", "activity_timeout",
-              help="Activity Timeout.",
-              default=5000000, show_default=True)
-def main(rd, wd, conf, jobs, flow_timeout, activity_timeout):
+def main(conf, jobs):
     """ CIC Flow Meter """
 
-    # rd check
-    if not os.path.isdir(rd):
-        click_fail("The read dir does not exist!")
-
-    # wr check
-    os.makedirs(wd, exist_ok=True)
-    if not os.path.isdir(wd):
-        click_fail("The write dir does not exist!")
-
-    logging.debug("Infile: %s", rd)
-    logging.debug("Outfile: %s", wd)
+    # Check config file exists
+    logging.debug("Config: %s", conf)
+    if not os.path.isfile(conf):
+        click_fail("The config file does not exist!")
 
     # Read configuration file
     with open(conf, "r") as f:
         config = json.load(f)
 
-    for key, val in config.items():
-        # Check 'enable'
-        if "enable" in val and not val["enable"]:
-            continue
+    # Check read dir exists
+    logging.debug("Input Directory: %s", config["read-dir"])
+    if not os.path.isdir(config["read-dir"]):
+        click_fail("The read dir does not exist!")
 
-        # Check 'proto'
-        if "proto" not in val:
-            val["proto"] = "all"
+    # Create wite dir
+    os.makedirs(config["write-dir"], exist_ok=True)
 
-        # Handle 'tcp', 'udp'
-        for proto in ["tcp", "udp"]:
-            if val["proto"] == proto or val["proto"] == "all":
-                # Check 'tcp_index', 'udp_index'
-                if proto + "_index" not in val:
-                    index = get_index_from_pcap(os.path.join(rd, key), proto)
+    # Check write dir exists
+    logging.debug("Output Directory: %s", config["write-dir"])
+    if not os.path.isdir(config["write-dir"]):
+        click_fail("The write dir does not exist!")
+
+    # Threading
+    not_done = []
+    with ProcessPoolExecutor(max_workers=jobs) as executor:
+        # Read pcap files
+        for key, val in config["pcap"].items():
+            # Check 'enable' (default: False)
+            if "enable" in val and not val["enable"]:
+                continue
+
+            # Check 'proto'
+            if "proto" not in val or val["proto"] not in ["tcp", "udp"]:
+                val["proto"] = "tcp || udp"
+
+            # Check 'index'
+            if "index" not in val:
+                val["index"] = {}
+
+            # Check 'tcp/udp index'
+            for tl in ["tcp", "udp"]:
+                if tl not in val["index"]:
+                    val["index"][tl] = None
                 else:
-                    index = get_index_from_str(val["tcp_index"])
+                    val["index"][tl] = get_index_from_str(val["index"][tl])
 
-                # Check 'label'
-                if "label" not in val:
-                    val["label"] = None
+            # Check 'label'
+            if "label" not in val:
+                val["label"] = None
 
-                not_done = []
+            print(key)
 
-                # Calculate features from TCP or UDP stream
-                with ThreadPoolExecutor(max_workers=jobs) as executor:
-                    for i in index:
-                        not_done.append(executor.submit(worker, os.path.join(rd, key), proto, i, val["label"]))
+            # Submit jobs
+            not_done.append(executor.submit(worker,
+                                            os.path.join(config["read-dir"], key),
+                                            val["proto"],
+                                            val["index"],
+                                            val["label"],
+                                            os.path.join(config["write-dir"], val["output"])))
 
-                    while not_done:
-                        done, not_done = wait(not_done, return_when=FIRST_COMPLETED)
-                        feature.append(done.pop().result())
-
-                feature.export(os.path.join(wd, "out.csv"))
+        while not_done:
+            done, not_done = wait(not_done, return_when=FIRST_COMPLETED)
+            print("{} done".format(done.pop().result()))
+            # Debug
+            # worker(os.path.join(config["read-dir"], key),
+            #        val["proto"],
+            #        val["index"],
+            #        val["label"],
+            #        os.path.join(config["write-dir"], val["output"]))
 
 
 def click_fail(msg):
@@ -97,20 +105,38 @@ def get_index_from_str(string):
                  if '-' in a else [int(a)]) for a in string.split(',')), [])
 
 
-def get_index_from_pcap(pcap, proto):
-    pkts = FileCapture(pcap, display_filter=proto, keep_packets=False)
-    count = -1
-    for pkt in pkts:
-        count = max(int(pkt[proto].stream), count)
-    return range(count + 1)
+def worker(pcap, filter, index, label, csv):
+    flows = {
+        "tcp": {},
+        "udp": {}
+    }
 
-
-def worker(pcap, proto, idx, label=None):
-    filter = "{}.stream eq {}".format(proto, idx)
     pkts = FileCapture(pcap, display_filter=filter, keep_packets=False)
-    flow = NetFlow(pkts, proto)
-    source = "{}-{}-{}".format(pcap, proto, idx)
-    return flow.to_df(source, label)
+
+    for idx, pkt in enumerate(pkts):
+        tl = pkt.transport_layer.lower()
+        stream = int(pkt[tl].stream)
+
+        # Check requirement
+        if index[tl] is not None and stream not in index[tl]:
+            continue
+
+        # Create new flow
+        if stream not in flows[tl]:
+            flows[tl][stream] = NetFlow(tl)
+
+        # Calcualte statistics
+        flows[tl][stream].upd_flow(pkt)
+
+    df = pd.DataFrame(columns=Feature.col)
+
+    for tl in ["tcp", "udp"]:
+        for idx, flow in flows[tl].items():
+            source = "{}-{}-{}".format(pcap, tl, idx)
+            df = df.append(flow.to_df(source, label))
+
+    df.to_csv(csv, index=False)
+    return csv
 
 
 if __name__ == "__main__":
@@ -122,7 +148,7 @@ if __name__ == "__main__":
     logging.getLogger().setLevel(logging.ERROR)
 
     # RuntimeError: Cannot run the event loop while another loop is running
-    nest_asyncio.apply()
+    # nest_asyncio.apply()
 
     # Click CLI
     main()
