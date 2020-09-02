@@ -1,16 +1,23 @@
 import click
+import csv
 import json
 import logging
-import nest_asyncio
+import magic
 import os
-import pandas as pd
 
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, wait, FIRST_COMPLETED
+from concurrent.futures import ProcessPoolExecutor, wait, FIRST_COMPLETED
 from pyfiglet import Figlet
-from pyshark import FileCapture
 
-from netflow import NetFlow
-from feature import Feature # feature
+import dpkt
+from dpkt.ethernet import Ethernet, ETH_TYPE_IP, ETH_TYPE_IP6
+from dpkt.ip import IP_PROTO_TCP, IP_PROTO_UDP
+from socket import inet_ntop, AF_INET, AF_INET6
+
+from tcpflow import TCPFlow
+from feature import Feature
+
+PCAP   = "application/vnd.tcpdump.pcap"
+PCAPNG = "application/octet-stream"
 
 
 @click.command()
@@ -105,38 +112,96 @@ def get_index_from_str(string):
                  if '-' in a else [int(a)]) for a in string.split(',')), [])
 
 
-def worker(pcap, filter, index, label, csv):
-    flows = {
-        "tcp": {},
-        "udp": {}
+def get_pkt_id(src, sport, dst, dport, proto=IP_PROTO_TCP, v=4):
+    if sport < dport:
+        src, sport, dst, dport = dst, dport, src, sport
+
+    if proto == IP_PROTO_TCP:
+        p = "TCP"
+    elif proto == IP_PROTO_UDP:
+        p = "UDP"
+    else:
+        raise ValueError("Argument proto must be TCP or UDP")
+
+    if v == 4:
+        sep = ":"
+        src = inet_ntop(AF_INET, src)
+        dst = inet_ntop(AF_INET, dst)
+    elif v == 6:
+        sep = "."
+        src = inet_ntop(AF_INET6, src)
+        dst = inet_ntop(AF_INET6, dst)
+    else:
+        raise ValueError("Argument v must be AF_INET or AF_INET6")
+
+    return "{} {}{}{} <> {}{}{}".format(p,
+                                        src, sep, sport,
+                                        dst, sep, dport)
+
+
+def worker(pcap, filter, index, label, out):
+    f = open(pcap, "rb")
+    mime = magic.from_file(pcap, mime=True)
+
+    if mime == PCAP:
+        pkts = dpkt.pcap.Reader(f)
+    elif mime == PCAPNG:
+        pkts = dpkt.pcapng.Reader(f)
+    else:
+        raise ValueError("Argument pcap must be pcap or pcapng")
+
+    id_to_index = {
+        IP_PROTO_TCP: {},
+        IP_PROTO_UDP: {}
     }
+    flows = {
+        IP_PROTO_TCP: {},
+        IP_PROTO_UDP: {}
+    }
+    data = [Feature.col]
 
-    pkts = FileCapture(pcap, display_filter=filter, keep_packets=False)
-
-    for idx, pkt in enumerate(pkts):
-        tl = pkt.transport_layer.lower()
-        stream = int(pkt[tl].stream)
-
-        # Check requirement
-        if index[tl] is not None and stream not in index[tl]:
+    for ts, buf in pkts:
+        eth = Ethernet(buf)
+        if eth.type != ETH_TYPE_IP:
             continue
 
-        # Create new flow
-        if stream not in flows[tl]:
-            flows[tl][stream] = NetFlow(tl)
+        ip = eth.data
+        if ip.p == IP_PROTO_TCP:  # Handle TCP
+            tcp = ip.data
 
-        # Calcualte statistics
-        flows[tl][stream].upd_flow(pkt)
+            # Create new id to index mapping
+            id = get_pkt_id(ip.src, tcp.sport, ip.dst, tcp.dport, ip.p, ip.v)
+            if id not in id_to_index[ip.p]:
+                id_to_index[ip.p][id] = len(id_to_index[ip.p])
 
-    df = pd.DataFrame(columns=Feature.col)
+            # Check requirement
+            idx = id_to_index[ip.p][id]
+            if index["tcp"] is not None and idx not in index["tcp"]:
+                continue
 
-    for tl in ["tcp", "udp"]:
-        for idx, flow in flows[tl].items():
-            source = "{}-{}-{}".format(pcap, tl, idx)
-            df = df.append(flow.to_df(source, label))
+            # Create new flow
+            if idx not in flows[ip.p]:
+                flows[ip.p][idx] = TCPFlow(id, ts, tcp)
+            else:
+                flows[ip.p][idx].upd_flow(ts, tcp)
+        elif ip.p == IP_PROTO_UDP:  # Handle UDP
+            udp = ip.data
+            # TODO
 
-    df.to_csv(csv, index=False)
-    return csv
+    f.close()
+    print("{} prepare to write".format(pcap))
+
+
+    for p in [IP_PROTO_TCP, IP_PROTO_UDP]:
+        for idx, flow in flows[p].items():
+            source = "{}-{}-{}".format(pcap, p, idx)
+            data.append(flow.to_list(source, label))
+
+    with open(out, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerows(data)
+
+    return out
 
 
 if __name__ == "__main__":
@@ -146,9 +211,6 @@ if __name__ == "__main__":
 
     # logging
     logging.getLogger().setLevel(logging.ERROR)
-
-    # RuntimeError: Cannot run the event loop while another loop is running
-    # nest_asyncio.apply()
 
     # Click CLI
     main()

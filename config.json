@@ -1,5 +1,5 @@
 {
-  "read-dir": "pcap",
+  "read-dir": "/mnt",
   "write-dir": "csv",
   "pcap": {
     "demo.pcap": {
@@ -13,58 +13,79 @@
       "enable": false,
       "comment": [""]
     },
-    "test4-1.pcapng": {
+    "test4.pcapng": {
       "proto": "tcp",
-      "label": "normal",
-      "output": "test_00001.csv",
+      "label": "attack",
+      "output": "attack.csv",
+      "index": {
+        "tcp": "1-2"
+      },
+      "enable": false
+    },
+    "dvwa-sqlmap-union-low.pcap": {
+      "proto": "tcp",
+      "label": "sql-injection",
+      "output": "sql1.csv",
+      "index": {
+        "tcp": "1-723"
+      },
+      "enable": false
+    },
+    "dvwa-sqlmap-boolean-low-split.pcap": {
+      "proto": "tcp",
+      "label": "sql-injection",
+      "output": "sql2.csv",
+      "index": {
+        "tcp": "1,4-198020"
+      },
       "enable": true
     },
-    "test4-2.pcapng": {
+    "mon.pcap": {
       "proto": "tcp",
       "label": "normal",
-      "output": "test_00002.csv",
-      "enable": true
-    },
-    "test4-3.pcapng": {
-      "proto": "tcp",
-      "label": "normal",
-      "output": "test_00003.csv",
+      "output": "mon.csv",
       "enable": false
     },
-    "test4-4.pcapng": {
+    "mon.pcap1": {
       "proto": "tcp",
       "label": "normal",
-      "output": "test_00004.csv",
+      "output": "mon1.csv",
       "enable": false
     },
-    "test4-5.pcapng": {
+    "mon.pcap2": {
       "proto": "tcp",
       "label": "normal",
-      "output": "test_00005.csv",
+      "output": "mon2.csv",
       "enable": false
     },
-    "test4-6.pcapng": {
+    "mon.pcap3": {
       "proto": "tcp",
       "label": "normal",
-      "output": "test_00006.csv",
+      "output": "mon3.csv",
       "enable": false
     },
-    "test4-7.pcapng": {
+    "mon.pcap4": {
       "proto": "tcp",
       "label": "normal",
-      "output": "test_00007.csv",
+      "output": "mon4.csv",
       "enable": false
     },
-    "test4-8.pcapng": {
+    "mon.pcap5": {
       "proto": "tcp",
       "label": "normal",
-      "output": "test_00008.csv",
+      "output": "mon5.csv",
       "enable": false
     },
-    "out_00001_20170703201803.pcap": {
+    "mon.pcap6": {
       "proto": "tcp",
       "label": "normal",
-      "output": "out_00001.csv",
+      "output": "mon6.csv",
+      "enable": false
+    },
+    "mon.pcap7": {
+      "proto": "tcp",
+      "label": "normal",
+      "output": "mon7.csv",
       "enable": false
     }
   }
