@@ -74,7 +74,11 @@ def main(conf, jobs):
                 if tl not in val["index"]:
                     val["index"][tl] = None
                 else:
-                    val["index"][tl] = get_index_from_str(val["index"][tl])
+                    if "txt" in val["index"][tl]:
+                        with open(os.path.join(config["read-dir"], val["index"][tl]), "r") as txt:
+                            val["index"][tl] = get_index_from_str(txt.read())
+                    else:
+                        val["index"][tl] = get_index_from_str(val["index"][tl])
 
             # Check 'label'
             if "label" not in val:
@@ -159,8 +163,9 @@ def worker(pcap, filter, index, label, out):
         IP_PROTO_UDP: {}
     }
     data = [Feature.col]
+    length = 0
 
-    for ts, buf in pkts:
+    for i, (ts, buf) in enumerate(pkts):
         eth = Ethernet(buf)
         if eth.type != ETH_TYPE_IP:
             continue
@@ -172,18 +177,28 @@ def worker(pcap, filter, index, label, out):
             # Create new id to index mapping
             id = get_pkt_id(ip.src, tcp.sport, ip.dst, tcp.dport, ip.p, ip.v)
             if id not in id_to_index[ip.p]:
-                id_to_index[ip.p][id] = len(id_to_index[ip.p])
+                id_to_index[ip.p][id] = length
+                length += 1
 
             # Check requirement
-            idx = id_to_index[ip.p][id]
-            if index["tcp"] is not None and idx not in index["tcp"]:
-                continue
+            # if index["tcp"] is not None and idx not in index["tcp"]:
+            #     continue
 
             # Create new flow
+            idx = id_to_index[ip.p][id]
             if idx not in flows[ip.p]:
-                flows[ip.p][idx] = TCPFlow(id, ts, tcp)
+                flows[ip.p][idx] = TCPFlow(id, ts, tcp, i)
             else:
-                flows[ip.p][idx].upd_flow(ts, tcp)
+                if tcp.flags == 2:  # [TCP Port numbers reused]
+                    if index["tcp"] is None or idx in index["tcp"]:
+                        source = "{}-{}-{}".format(pcap, ip.p, idx)
+                        data.append(flows[ip.p][idx].to_list(source, label))
+                    flows[ip.p].pop(idx, None)
+                    id_to_index[ip.p][id] = length
+                    flows[ip.p][length] = TCPFlow(id, ts, tcp, i)
+                    length += 1
+                else:
+                    flows[ip.p][idx].upd_flow(ts, tcp, i)
         elif ip.p == IP_PROTO_UDP:  # Handle UDP
             udp = ip.data
             # TODO
@@ -191,15 +206,16 @@ def worker(pcap, filter, index, label, out):
     f.close()
     print("{} prepare to write".format(pcap))
 
-
     for p in [IP_PROTO_TCP, IP_PROTO_UDP]:
         for idx, flow in flows[p].items():
-            source = "{}-{}-{}".format(pcap, p, idx)
-            data.append(flow.to_list(source, label))
+            if index["tcp"] is None or idx in index["tcp"]:
+                source = "{}-{}-{}".format(pcap, p, idx)
+                data.append(flow.to_list(source, label))
 
     with open(out, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerows(data)
+        print("{}: {} lines".format(pcap, len(data) - 1))
 
     return out
 

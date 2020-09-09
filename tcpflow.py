@@ -7,11 +7,12 @@ from feature import Feature
 
 
 class TCPFlow:
-    def __init__(self, id, ts, tcp):
+    def __init__(self, id, ts, tcp, frame):
         self.id = id
         self.timestamp = ts
         self.duration = 0
         self.dp_ratio = 0
+        self.frame = frame
 
         self.flow = {
             "all": {
@@ -104,7 +105,8 @@ class TCPFlow:
         self.upd_flow_win_size(path, tcp.win)
         self.upd_flow_hdr(path, len(tcp) - len(tcp.data))
 
-    def upd_flow(self, ts, tcp):
+    def upd_flow(self, ts, tcp, frame):
+        self.frame = frame
         path = self.get_pkt_path(tcp.sport, tcp.dport)
 
         self.set_flow_duration(ts)
